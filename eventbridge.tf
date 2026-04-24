@@ -26,7 +26,7 @@ resource "aws_cloudwatch_event_rule" "json_created" {
 resource "aws_cloudwatch_event_target" "validator" {
   rule = aws_cloudwatch_event_rule.json_created.name
   target_id = "json-validator"
-  arn = aws_lambda_function.json_validator.arn
+  arn = aws_lambda_function.validator.arn
 }
 
 resource "aws_lambda_permission" "allow_eventbridge" {
