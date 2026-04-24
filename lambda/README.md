@@ -1,0 +1,4 @@
+package instructions:
+
+pip install -r requirements.txt -t .
+zip -r lambda.zip .
