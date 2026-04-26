@@ -16,4 +16,5 @@ resource "random_id" "suffix" {
 
 resource "aws_s3_bucket_notification" "eventbridge" {
   bucket = aws_s3_bucket.ingestion.id
+  eventbridge = true
 }

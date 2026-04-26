@@ -15,8 +15,8 @@ resource "aws_cloudwatch_event_rule" "json_created" {
         name = [aws_s3_bucket.ingestion.bucket]
       }
       object = {
-        key = [{
-          suffix = "*.json"
+        key: [{
+          suffix: ".json"
         }]
       }
     }

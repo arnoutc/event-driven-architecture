@@ -1,11 +1,18 @@
 resource "aws_lambda_function" "validator" {
   function_name = "json-schema-validator"
   role = aws_iam_role.validator_lambda.arn
-  runtime = "python3.13"
+  runtime = "python3.12"
   handler = "handler.lambda_handler"
   timeout = 30
 
-  filename = "lambda.zip"
+  architectures = ["arm64"]   # ✅ important as needed by runtime Lambda
+
+  filename         = "${path.module}/lambda.zip"
+  source_code_hash = filebase64sha256("${path.module}/lambda.zip")
+
+  layers = [
+    aws_lambda_layer_version.jsonschema_layer.arn
+  ]
 
   environment {
     variables = {
@@ -14,4 +21,13 @@ resource "aws_lambda_function" "validator" {
       SCHEMA_REGISTRY = aws_schemas_registry.json_ingestion.name
     }
   }
+}
+
+resource "aws_lambda_layer_version" "jsonschema_layer" {
+  layer_name          = "jsonschema-deps"
+  description         = "jsonschema + native dependencies (rpds)"
+  compatible_runtimes = ["python3.12"]
+
+  filename         = "${path.module}/lambda-layer.zip"
+  source_code_hash = filebase64sha256("${path.module}/lambda-layer.zip")
 }

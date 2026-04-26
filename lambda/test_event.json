@@ -1,0 +1,11 @@
+
+{
+  "detail": {
+    "bucket": {
+      "name": "json-ingestion-43aa86fb"
+    },
+    "object": {
+      "key": "orders/v1/test_event.json"
+    }
+  }
+}
