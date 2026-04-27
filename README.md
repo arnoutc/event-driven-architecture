@@ -313,6 +313,28 @@ aws s3 cp valid-order.json \
   - No validated event emitted
   - Receiver Lambda NOT invoked
 
+#### Expected result
+
+When invoked via EventBridge → API Gateway, you should see:
+
+```json
+
+{
+  "correlation_id": "corr-7f8a1f0c-...",
+  "message": "validated_event_received",
+  "payload": {
+    "data": { ... },
+    "metadata": {
+      "correlation_id": "corr-7f8a1f0c-...",
+      ...
+    }
+  }
+}
+```
+
+- Correlation ID preserved end‑to‑end
+- API Gateway + EventBridge flow verified
+
 ### Deployment
 
 Infrastructure is provisioned using Terraform.
