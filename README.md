@@ -288,6 +288,25 @@ In second terminal:
 
 ```
 
+### End-to-End Testing in AWS
+
+1. Upload a valid JSON file to S3:
+
+```bash
+aws s3 cp valid-order.json \
+  s3://<INGESTION_BUCKET>/orders/v1/test.json
+```
+
+2. Verify:
+  - Validator Lambda logs
+  - File appears in validated bucket
+  - Receiver Lambda log group exists
+  - Receiver logs show validated payload
+3. Upload an invalid JSON file and confirm:
+  - Error report written to rejected bucket
+  - No validated event emitted
+  - Receiver Lambda NOT invoked
+
 ### Deployment
 
 Infrastructure is provisioned using Terraform.
@@ -296,11 +315,15 @@ Key configuration points:
 
 - S3 bucket has eventbridge = true
 - EventBridge rule filters .json objects
-- Lambda configuration:
+- Validator Lambda configuration:
   - runtime: python3.12
   - architecture: arm64
   - handler: handler.lambda_handler
   - dependency layer attached
+- Receiver Lambda configuration
+  - runtime: python3.12
+  - architecture: arm64
+  - handler: receiver.lambda_handler
 
 #### Deploy with:
 
@@ -346,6 +369,7 @@ Schemas are strict by default, centrally versioned, and retrieved dynamically by
 
 #### Why Schema Registry?
 
+- Validation is a first-class concern
 - Central governance of contracts
 - Version history and evolution
 - No redeploy needed for schema changes
@@ -382,3 +406,4 @@ Schemas are strict by default, centrally versioned, and retrieved dynamically by
 - Reproducible builds
 - Local / AWS parity
 - Native dependency correctness
+- Observability designed-in, not bolted-on
