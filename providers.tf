@@ -11,4 +11,13 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
+
+  default_tags {
+    tags = {
+      Application = "event-driven-architecture"
+      Environment = var.environment
+      Owner       = "data-platform"
+      CostCenter  = "12345"
+    }
+  }
 }
