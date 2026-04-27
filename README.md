@@ -178,7 +178,9 @@ This shows the complete lifecycle of a single ingested file
 
 ```terminal
 ├── README.md
-├── Makefile
+├── architecture.png        # Architecture diagram image
+├── S3-EventBridge-Lambda-SchemaRegistry-S3.drawio # Architecture diagram
+├── Makefile                # build file to create zip files for Lambdas
 ├── lambda/                 # Validator Lambda
 │   ├── schema              # sample JSON to ingest in S3 injection bucket and sample JSON Schema
 │   ├── handler.py          # Lambda handler (function code)
@@ -193,10 +195,13 @@ This shows the complete lifecycle of a single ingested file
 └── .terraform/
 │   ├── api-gateway.tf      # Amazon API Gateway and API Destination config
 │   ├── eventbridge.tf      # Amazon EventBridge config
+│   ├── iam.tf              # Amazon IAM Role and Policy config
 │   ├── lambda-receiver.tf  # AWS Lambda Receiver config
 │   ├── lambda-validator.tf # AWS Lambda Validator config
+│   ├── providers.tf        # AWS provider and cost allocation tags that all resources inherit
 │   ├── s3.tf               # Amazon S3 bucket config
-
+│   ├── sqs.tf              # Amazon SQS dead-letter-queue (DLQ) config
+│   ├── variables.tf        # Terraform variables
 ```
 
 ## 🧪 Local Development & Testing
