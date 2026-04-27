@@ -31,3 +31,16 @@ resource "aws_lambda_layer_version" "jsonschema_layer" {
   filename         = "${path.module}/lambda-layer.zip"
   source_code_hash = filebase64sha256("${path.module}/lambda-layer.zip")
 }
+
+resource "aws_iam_role_policy" "lambda_eventbridge_publish" {
+  role = aws_iam_role.validator_lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = ["events:PutEvents"]
+      Resource = "*"
+    }]
+  })
+}

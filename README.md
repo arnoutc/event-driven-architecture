@@ -1,8 +1,13 @@
 # Event‑Driven JSON Ingestion & Validation on AWS
 
-This repository contains a **serverless, event‑driven architecture** for validating JSON files uploaded to Amazon S3 against versioned JSON Schemas, using **Amazon EventBridge**, **AWS Lambda**, and the **EventBridge Schema Registry**.
+This repository contains a **serverless, event‑driven architecture** on AWS that:
 
-The design emphasizes **decoupling, validation at the boundary, and schema governance**, while remaining simple, observable, and cost‑efficient.
+- Validating JSON files uploaded to Amazon S3 against **versioned JSON Schemas**
+- Rejects invalid data early and persistently
+- Forwards **only validated data** to a downstream **API Gateway consumer**
+- Provides **full end-to-end traceability** using correlation IDs
+
+The architecture is designed to be **cloud-native, decoupled, observable, and enterprise ready**. The design ensures **validation at the boundary, and schema governance**, while remaining simple, observable, and cost‑efficient.
 
 ---
 
@@ -13,11 +18,33 @@ The design emphasizes **decoupling, validation at the boundary, and schema gover
 ### High‑level flow
 
 ```
-S3 (JSON uploaded)
-→ EventBridge (Object Created event)
-→ EventBridge Rule (filter .json)
-→ Lambda (JSON Schema validation)
-→ S3 (validated / rejected)
+S3 (raw JSON)
+ └─▶ EventBridge (aws.s3)
+      └─▶ Lambda: Schema Validator
+           ├─ Invalid → Rejected S3 (+ metrics)
+           └─ Valid
+                └─ PutEvents (custom event)
+                     └─▶ EventBridge Rule
+                          └─▶ API Destination
+                               └─> API Gateway
+                                  └─> Dummy Receiver Lambda
+                                        └─> CloudWatch Logs
+                               ├─ Retries
+                               └─ DLQ (SQS)
+```
+Correlation flow
+
+```
+S3 upload
+ └─> Validator Lambda
+      ├─ generate correlation_id
+      ├─ log with correlation_id
+      ├─ include correlation_id in:
+      │    • EventBridge event detail
+      │    • S3 rejected / validated payload metadata
+      └─> EventBridge API Destination
+             └─> API Gateway
+                  └─> Receiver Lambda logs correlation_id
 ```
 
 ### Key principles
@@ -25,63 +52,151 @@ S3 (JSON uploaded)
 - Event‑driven, not request‑driven
 - JSON schema validation at ingestion boundaries
 - Strong separation of concerns
-- No polling, no API Gateway
+- No polling
 - Native AWS integrations only
+- EventBridge routing happens only on validated events
+- Raw S3 events never reach the destination.
+- Loose coupling between producers and consumers
+- Retry and Dead-Letter-Queue (DLQ) handling
+- End-to-end observability via correlation IDs
 
 ---
 
 ## 🧩 Components
 
-### Amazon S3
+### Amazon S3 (Ingestion)
 - Entry point for JSON ingestion
 - Publishes object‑level events directly to EventBridge
-- Uses suffix convention (`.json`)
+- Uses suffix convention (`.json`). For further filtering (e.g. a prefix), new rules can be set up
 
 ### Amazon EventBridge
+- Acts as the central event backbone
 - Receives S3 `Object Created` events
 - Filters relevant objects using rules
 - Routes events to validation Lambda
-- Enables decoupling, retries, replay, and fan‑out
+- Routes custom validated events to downstream consumers
+- Provides fan-out, retries, and DLQ support
 
 ### EventBridge Schema Registry
 - Stores **JSON Schemas for file contents**
-- Manages schema versioning and evolution
-- Schema versions are numeric and monotonic
-- Lambda always retrieves the latest schema version
+- Manages schema versioning automatically
+- Validator Lambda always retrieves the **latest schema**
+- Used for **data contracts**, not S3 event schemas
 
-> Note: The Schema Registry is used for **data schemas**, not S3 event schemas.
+---
 
-### AWS Lambda (Validator)
-- Triggered by EventBridge
+### Schema Validator Lambda
+- Triggered by EventBridge on S3 object creation
 - Responsibilities:
-  1. Load JSON file from S3
-  2. Select schema based on object key
-  3. Fetch schema from EventBridge Schema Registry
-  4. Validate JSON using `jsonschema`
-  5. Route result:
-     - ✅ Valid → validated bucket
-     - ❌ Invalid → rejected bucket with error report
+  1. Load JSON from S3
+  2. Resolve schema based on object key
+  3. Validate JSON using `jsonschema`
+  4. ❌ If invalid:
+     - Write detailed error report in rejected bucket
+  5. ✅ If valid:
+     - Write JSON to validated bucket
+     - Emit a `JsonValidated` custom event to EventBridge
 
 - Runs on **ARM64**
 - Uses a Lambda Layer for third‑party dependencies
 
 ---
 
+### EventBridge API Destination
+- Receives `JsonValidated` events only
+- Handles:
+  - HTTP invocation
+  - retry policy
+  - dead-letter queue (SQS)
+- Invokes API Gateway using an IAM role
+
+---
+
+### API Gateway (HTTP API)
+- Corporate-firewall-safe HTTPS endpoint
+- Serves as the downstream API consumer
+- Integrates with a dummy Receiver Lambda for testing
+
+NOTE: Aim of the Proof-Of-Concept is to discuss extending to Azure Service Bus integration
+
+---
+
+### Receiver Lambda
+- Invoked by API Gateway
+- Logs validated payloads to CloudWatch
+- Acts as a stand-in for real downstream services
+
+---
+
+## 🔎 Correlation ID & Tracing
+
+### Correlation ID strategy
+
+- A **single correlation ID** is generated per ingested file
+- Generated by the **Schema Validator Lambda**
+- Propagated through:
+  - Validator logs
+  - Rejected S3 error reports
+  - EventBridge validated events
+  - API Gateway payloads
+  - Receiver Lambda logs
+
+### Example correlation ID
+
+```
+corr-7f8a1f0c-3a0c-4c7b-9d1a-4dfb6ec2b7c1
+```
+### Example validated event payload
+
+```json
+{
+  "data": {
+    "orderId": "PRD00123",
+    "amount": 10
+  },
+  "metadata": {
+    "correlation_id": "corr-7f8a1f0c-3a0c-4c7b-9d1a-4dfb6ec2b7c1",
+    "bucket": "json-ingestion-...",
+    "key": "orders/v1/test.json",
+    "schema": "orders-v1"
+  }
+}
+```
+
+### Tracing end-to-end
+
+In CloudWatch Logs Insights:
+
+```
+fields @timestamp, @message
+| filter @message like /corr-7f8a1f0c/
+| sort @timestamp asc
+```
+This shows the complete lifecycle of a single ingested file
+
 ## 📁 Repository Structure
 
 ```terminal
+├── README.md
 ├── Makefile
-├── lambda/
+├── lambda/                 # Validator Lambda
 │   ├── schema              # sample JSON to ingest in S3 injection bucket and sample JSON Schema
 │   ├── handler.py          # Lambda handler (function code)
 │   └── test_event.json     # Local EventBridge test event
+├── receiver/               # API consumer Lambda
+│   ├── receiver.py          # Lambda handler (function code)
 ├── layer/
 │   ├── requirements.txt    # Runtime dependencies
 │   └── python/             # Built Lambda layer contents
 ├── lambda.zip              # Function artifact (generated)
 ├── lambda-layer.zip        # Layer artifact (generated)
 └── .terraform/
-└── *.tf                    # Infrastructure as Code
+│   ├── api-gateway.tf      # Amazon API Gateway and API Destination config
+│   ├── eventbridge.tf      # Amazon EventBridge config
+│   ├── lambda-receiver.tf  # AWS Lambda Receiver config
+│   ├── lambda-validator.tf # AWS Lambda Validator config
+│   ├── s3.tf               # Amazon S3 bucket config
+
 ```
 
 ## 🧪 Local Development & Testing
@@ -98,15 +213,16 @@ This:
 
 - Builds dependencies inside Amazon Linux
 - Produces:
-  - lambda.zip
-  - lambda-layer.zip
+  - lambda.zip (validator)
+  - receiver.zip (receiver)
+  - lambda-layer.zip (dependencies)
 
-### Run Lambda locally
+### Test validator locally
 
 Run in a terminal:
 
 ```bash
-make local
+make local-validator
 ```
 
 ### Invoke locally
@@ -119,11 +235,11 @@ curl -X POST \
   -d @lambda/test_event.json
 ```
 
-### Expected response
+#### Expected response
 
 In first terminal:
 
-```bash
+```json
 Event received: {
   "detail": {
     "bucket": {
@@ -137,8 +253,39 @@ Event received: {
 ```
 
 In second terminal:
-```bash
+```json
 { "status": "LOCAL_OK" }
+```
+### Test receiver locally
+
+Run in a terminal:
+
+```bash
+make local-receiver
+```
+
+### Invoke locally
+
+Run in a second terminal:
+
+```bash
+curl -X POST \
+  http://localhost:9001/2015-03-31/functions/function/invocations \
+  -d '{"test":"validated payload"}'
+```
+
+#### Expected response
+
+In first terminal:
+
+```json
+
+```
+
+In second terminal:
+
+```json
+
 ```
 
 ### Deployment
@@ -166,7 +313,7 @@ terraform apply "dev.plan"
 
 Example schema stored in EventBridge Schema Registry (orders-v1):
 
-```bash
+```json
  {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Order",
