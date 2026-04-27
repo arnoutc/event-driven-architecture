@@ -6,8 +6,20 @@ import json
 # -------------------------------------------------------------------
 
 def lambda_handler(event, context):
-    # API Gateway puts body as string
-    body = json.loads(event["body"])
+    """
+    Receiver Lambda for validated events.
+
+    Handles:
+    - API Gateway proxy events (event["body"])
+    - Direct Lambda invocation (local testing)
+    """
+    
+    # Case 1: API Gateway HTTP API invocation
+    if "body" in event:
+        body = json.loads(event["body"])
+    else:
+        # Case 2: Direct Lambda invocation (local testing)
+        body = event
 
     correlation_id = body.get("metadata", {}).get("correlation_id", "unknown")
 

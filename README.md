@@ -279,13 +279,19 @@ curl -X POST \
 In first terminal:
 
 ```json
-
+{
+  "correlation_id": "unknown",
+  "message": "validated_event_received",
+  "payload": {
+    "test": "validated payload"
+  }
+}
 ```
 
 In second terminal:
 
 ```json
-
+{"statusCode": 200, "body": "{\"status\": \"ok\"}"}%  
 ```
 
 ### End-to-End Testing in AWS

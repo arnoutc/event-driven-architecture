@@ -1,0 +1,8 @@
+{
+    "errorMessage": "'body'", 
+    "errorType": "KeyError", 
+    "requestId": "5260249c-e69d-4fd5-ae38-55fa081fb3fc", 
+    "stackTrace": [
+        "  File \"/var/task/receiver.py\", line 10, in lambda_handler\n    body = json.loads(event[\"body\"])\n"
+        ]
+}
